@@ -5,6 +5,8 @@ import os
 import shlex
 import shutil
 import subprocess
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -19,6 +21,7 @@ SOURCE_DSN = (
     'jbot-pcm?hostaddr=100.115.252.23&sslmode=verify-full&sslrootcert=/etc/ssl/postgres/root.crt'
 )
 DEFAULT_PATH = '/usr/local/bin:/usr/bin:/bin:/root/.local/bin'
+DEFAULT_OMNIROUTE_BASE_URL = 'http://127.0.0.1:20128/v1'
 
 WORKERS = [
     {
@@ -79,6 +82,31 @@ def paused_providers() -> set[str]:
     return {part.strip().lower() for part in raw.split(',') if part.strip()}
 
 
+def omniroute_worker_config() -> dict | None:
+    model = os.environ.get('OMNIROUTE_MODEL', '').strip()
+    if not model:
+        return None
+
+    return {
+        'provider': 'OmniRoute',
+        'model': model,
+        'omniroute_base_url': os.environ.get('OMNIROUTE_BASE_URL', DEFAULT_OMNIROUTE_BASE_URL).strip(),
+        'omniroute_api_key': os.environ.get('OMNIROUTE_API_KEY', '').strip(),
+        'max_jobs': int(os.environ.get('OMNIROUTE_MAX_JOBS', '50000')),
+        'batch_size': int(os.environ.get('OMNIROUTE_BATCH_SIZE', '50')),
+        'rpm': float(os.environ.get('OMNIROUTE_RPM', '20')),
+        'log_file': WORKDIR / 'logs' / 'omniroute_worker.out',
+    }
+
+
+def all_workers() -> list[dict]:
+    workers = list(WORKERS)
+    omni = omniroute_worker_config()
+    if omni:
+        workers.append(omni)
+    return workers
+
+
 def resolve_cli_command(template: str, env: dict[str, str]) -> str:
     parts = shlex.split(template, posix=True)
     if not parts:
@@ -134,6 +162,21 @@ def claude_ready() -> bool:
     return '"is_error":true' not in out
 
 
+def omniroute_ready(base_url: str) -> bool:
+    base = base_url.rstrip('/')
+    if base.endswith('/v1'):
+        endpoint = f'{base}/models'
+    else:
+        endpoint = f'{base}/v1/models'
+
+    req = urllib.request.Request(endpoint, method='GET')
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            return 200 <= resp.status < 300
+    except (urllib.error.URLError, TimeoutError):
+        return False
+
+
 def worker_running(provider: str, model: str) -> bool:
     result = subprocess.run('ps -eo args', shell=True, check=False, capture_output=True, text=True)
     if result.returncode != 0:
@@ -151,22 +194,29 @@ def worker_running(provider: str, model: str) -> bool:
 
 def launch_worker(cfg: dict) -> None:
     env = worker_env()
-    cli_cmd = resolve_cli_command(cfg['cli_cmd'], env)
     cfg['log_file'].parent.mkdir(parents=True, exist_ok=True)
-    cmd = (
+    cmd_parts = [
         f"nohup {PYTHON} {RUNNER} "
-        f"--local-dsn \"{LOCAL_DSN}\" "
-        f"--source-dsn \"{SOURCE_DSN}\" "
-        f"--provider \"{cfg['provider']}\" "
-        f"--model \"{cfg['model']}\" "
-        f"--cli-cmd {shlex.quote(cli_cmd)} "
-        f"--max-jobs {cfg['max_jobs']} "
-        f"--batch-size {cfg['batch_size']} "
-        f"--rpm {cfg['rpm']} "
-        "--claim-ttl 3600 "
-        "--sync-batch-size 5000 "
-        f">> \"{cfg['log_file']}\" 2>&1 &"
-    )
+    ]
+    cmd_parts.append(f"--local-dsn \"{LOCAL_DSN}\" ")
+    cmd_parts.append(f"--source-dsn \"{SOURCE_DSN}\" ")
+    cmd_parts.append(f"--provider \"{cfg['provider']}\" ")
+    cmd_parts.append(f"--model \"{cfg['model']}\" ")
+    if cfg.get('provider') == 'OmniRoute':
+        cmd_parts.append(f"--omniroute-base-url \"{cfg['omniroute_base_url']}\" ")
+        if cfg.get('omniroute_api_key'):
+            cmd_parts.append(f"--omniroute-api-key {shlex.quote(cfg['omniroute_api_key'])} ")
+    elif cfg.get('cli_cmd'):
+        cli_cmd = resolve_cli_command(cfg['cli_cmd'], env)
+        cmd_parts.append(f"--cli-cmd {shlex.quote(cli_cmd)} ")
+
+    cmd_parts.append(f"--max-jobs {cfg['max_jobs']} ")
+    cmd_parts.append(f"--batch-size {cfg['batch_size']} ")
+    cmd_parts.append(f"--rpm {cfg['rpm']} ")
+    cmd_parts.append("--claim-ttl 3600 ")
+    cmd_parts.append("--sync-batch-size 5000 ")
+    cmd_parts.append(f">> \"{cfg['log_file']}\" 2>&1 &")
+    cmd = ''.join(cmd_parts)
     subprocess.run(cmd, shell=True, check=False, cwd=str(WORKDIR), env=env)
 
 
@@ -180,7 +230,7 @@ def main() -> None:
 
     paused = paused_providers()
 
-    for cfg in WORKERS:
+    for cfg in all_workers():
         provider = cfg['provider']
         model = cfg['model']
         if provider.lower() in paused:
@@ -192,6 +242,10 @@ def main() -> None:
 
         if provider == 'Anthropic' and not claude_ready():
             print(f"{provider}/{model}: not running, auth not ready")
+            continue
+
+        if provider == 'OmniRoute' and not omniroute_ready(cfg['omniroute_base_url']):
+            print(f"{provider}/{model}: not running, endpoint not reachable")
             continue
 
         launch_worker(cfg)

@@ -59,6 +59,18 @@ List available models from OmniRoute:
 curl -sS http://127.0.0.1:20128/v1/models
 ```
 
+Optional watchdog-managed OmniRoute worker (via `ensure_workers.py`):
+
+- Set `OMNIROUTE_MODEL` (required to enable OmniRoute worker)
+- Optional: `OMNIROUTE_BASE_URL`, `OMNIROUTE_API_KEY`, `OMNIROUTE_RPM`, `OMNIROUTE_BATCH_SIZE`, `OMNIROUTE_MAX_JOBS`
+
+Example:
+
+```bash
+export OMNIROUTE_MODEL="openai/gpt-4.1-mini"
+export OMNIROUTE_BASE_URL="http://127.0.0.1:20128/v1"
+```
+
 ## Local Postgres
 
 The script asks for a local DSN. If local Postgres is not installed, it offers a Docker-based setup path.
