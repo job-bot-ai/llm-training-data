@@ -2,7 +2,7 @@
 
 This workspace contains two scripts:
 
-- `run_job_enrichment.py`: syncs source jobs into a local Postgres database, claims unprocessed jobs for a specific provider/model, calls an LLM CLI, and stores structured labels.
+- `run_job_enrichment.py`: syncs source jobs into a local Postgres database, claims unprocessed jobs for a specific provider/model, calls either an LLM CLI or OmniRoute's OpenAI-compatible HTTP API, and stores structured labels.
 - `export_hf_jsonl.py`: exports finished labels into Hugging Face-friendly JSONL shards, defaulting to 10,000 rows per file.
 
 ## What the pipeline stores
@@ -37,6 +37,27 @@ anthropic messages create --model claude-sonnet-4-20250514 --input-file {prompt_
 ```
 
 Adjust the CLI template to match the exact command shape your installed CLI expects. The script requires `{prompt_file}` to be present in the template.
+
+### OmniRoute (native API mode)
+
+`run_job_enrichment.py` supports OmniRoute directly, without requiring a local CLI wrapper.
+
+- default base URL: `http://127.0.0.1:20128/v1`
+- endpoint used: `/chat/completions` (OpenAI-compatible)
+- model is whatever OmniRoute exposes (pick any available model id)
+
+Optional environment variables:
+
+```bash
+export OMNIROUTE_BASE_URL="http://127.0.0.1:20128/v1"
+export OMNIROUTE_API_KEY=""
+```
+
+List available models from OmniRoute:
+
+```bash
+curl -sS http://127.0.0.1:20128/v1/models
+```
 
 ## Local Postgres
 
@@ -88,6 +109,7 @@ Use a conservative starting pace and only increase after you confirm the CLI is 
 - Google/Gemini CLI: start at `12` requests per minute
 - OpenAI CLI/API wrapper: start at `20` requests per minute
 - Anthropic CLI/API wrapper: start at `8` requests per minute
+- OmniRoute (local): start at `20` requests per minute
 - Unknown CLI/provider: start at `10` requests per minute
 
 Those defaults are built into `run_job_enrichment.py`. They are intentionally conservative because each request carries a full job description and, once other providers have already labeled a row, peer outputs are also included in the prompt. That raises both token volume and the chance of provider throttling.
@@ -123,6 +145,19 @@ python run_job_enrichment.py \
   --max-jobs 5000 \
   --batch-size 25 \
   --rpm 12
+```
+
+OmniRoute example:
+
+```bash
+python run_job_enrichment.py \
+  --local-dsn "postgresql://postgres:postgres@localhost:5432/jbot_local" \
+  --provider "OmniRoute" \
+  --model "openai/gpt-4.1-mini" \
+  --omniroute-base-url "http://127.0.0.1:20128/v1" \
+  --max-jobs 5000 \
+  --batch-size 25 \
+  --rpm 20
 ```
 
 The first run will populate the local cache from the external source if the cache is empty.

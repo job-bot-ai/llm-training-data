@@ -22,6 +22,8 @@ import sys
 import tempfile
 import time
 import uuid
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -35,11 +37,14 @@ DEFAULT_SOURCE_DSN = (
 )
 DEFAULT_LOCAL_DSN = "postgresql://postgres:postgres@localhost:5432/jbot_local"
 DEFAULT_SCHEMA = "training"
+DEFAULT_OMNIROUTE_BASE_URL = "http://127.0.0.1:20128/v1"
+OMNIROUTE_SENTINEL_CLI = "__omniroute_native__"
 PROVIDER_RPM_SUGGESTIONS = {
     "anthropic": 8.0,
     "google": 12.0,
     "gemini": 12.0,
     "openai": 20.0,
+    "omniroute": 20.0,
 }
 
 
@@ -50,11 +55,17 @@ class RunConfig:
     provider: str
     model: str
     cli_command_template: str
+    omniroute_base_url: str | None
+    omniroute_api_key: str | None
     max_jobs: int
     claim_batch_size: int
     requests_per_minute: float
     claim_ttl_seconds: int
     sync_batch_size: int
+
+
+def provider_uses_omniroute(provider: str) -> bool:
+    return provider.strip().lower() in {"omniroute", "omni-route", "omni route"}
 
 
 def load_env_file(file_path: Path) -> None:
@@ -445,6 +456,74 @@ def run_cli(cli_template: str, prompt: str) -> dict[str, Any]:
             pass
 
 
+def run_omniroute(
+    model: str,
+    prompt: str,
+    base_url: str,
+    api_key: str | None,
+    timeout_seconds: int = 180,
+) -> dict[str, Any]:
+    base = base_url.rstrip("/")
+    if base.endswith("/chat/completions"):
+        endpoint = base
+    elif base.endswith("/v1"):
+        endpoint = f"{base}/chat/completions"
+    else:
+        endpoint = f"{base}/v1/chat/completions"
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": "Return strict JSON only."},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.2,
+    }
+    data = json.dumps(payload).encode("utf-8")
+
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    req = urllib.request.Request(endpoint, data=data, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
+            raw_body = resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"OmniRoute HTTP error (status={exc.code})\nURL: {endpoint}\nResponse:\n{body}"
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"OmniRoute request failed for {endpoint}: {exc}") from exc
+
+    try:
+        parsed = json.loads(raw_body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"OmniRoute returned non-JSON response:\n{raw_body}") from exc
+
+    choices = parsed.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise RuntimeError(f"OmniRoute response missing choices:\n{raw_body}")
+
+    first = choices[0]
+    if not isinstance(first, dict):
+        raise RuntimeError(f"OmniRoute response has invalid choices format:\n{raw_body}")
+
+    message = first.get("message")
+    if not isinstance(message, dict):
+        raise RuntimeError(f"OmniRoute response missing message block:\n{raw_body}")
+
+    content = message.get("content")
+    if not isinstance(content, str):
+        raise RuntimeError(f"OmniRoute message missing text content:\n{raw_body}")
+
+    return extract_json_object(content)
+
+
 def validate_label(payload: dict[str, Any]) -> tuple[str, list[str], str]:
     role_priorities = str(payload.get("role_priorities", "")).strip()
     reasoning = str(payload.get("reasoning", "")).strip()
@@ -630,16 +709,32 @@ def gather_config(args: argparse.Namespace) -> RunConfig:
 
     local_dsn = args.local_dsn or prompt_text("Local Postgres DSN", env_local_dsn)
     source_dsn = args.source_dsn or prompt_text("Source Postgres DSN", env_source_dsn)
-    provider = args.provider or prompt_text("LLM provider label (e.g., Google, OpenAI, Anthropic)")
+    provider = args.provider or prompt_text("LLM provider label (e.g., Google, OpenAI, Anthropic, OmniRoute)")
     model = args.model or prompt_text("Model label (e.g., gemini-2.5-pro)")
 
-    default_cli = "gemini --prompt \"\" < {prompt_file}"
-    cli_command_template = args.cli_cmd or prompt_text(
-        "CLI command template (must include {prompt_file})",
-        default_cli,
-    )
-    if "{prompt_file}" not in cli_command_template:
-        raise ValueError("CLI template must include {prompt_file}")
+    omniroute_base_url: str | None = None
+    omniroute_api_key: str | None = None
+
+    if provider_uses_omniroute(provider):
+        cli_command_template = OMNIROUTE_SENTINEL_CLI
+        omniroute_base_url = (
+            args.omniroute_base_url
+            or os.environ.get("OMNIROUTE_BASE_URL")
+            or DEFAULT_OMNIROUTE_BASE_URL
+        )
+        omniroute_api_key = (
+            args.omniroute_api_key
+            if args.omniroute_api_key is not None
+            else os.environ.get("OMNIROUTE_API_KEY")
+        )
+    else:
+        default_cli = "gemini --prompt \"\" < {prompt_file}"
+        cli_command_template = args.cli_cmd or prompt_text(
+            "CLI command template (must include {prompt_file})",
+            default_cli,
+        )
+        if "{prompt_file}" not in cli_command_template:
+            raise ValueError("CLI template must include {prompt_file}")
 
     suggested_rpm = suggest_requests_per_minute(provider, cli_command_template)
     max_jobs = args.max_jobs or prompt_int("How many jobs should this run process", 1000)
@@ -658,6 +753,8 @@ def gather_config(args: argparse.Namespace) -> RunConfig:
         provider=provider,
         model=model,
         cli_command_template=cli_command_template,
+        omniroute_base_url=omniroute_base_url,
+        omniroute_api_key=omniroute_api_key,
         max_jobs=max_jobs,
         claim_batch_size=claim_batch_size,
         requests_per_minute=requests_per_minute,
@@ -727,7 +824,17 @@ def run(config: RunConfig, schema: str) -> None:
                         config.model,
                     )
                     prompt = build_prompt(row, peer_enrichments)
-                    raw = run_cli(config.cli_command_template, prompt)
+                    if provider_uses_omniroute(config.provider):
+                        if not config.omniroute_base_url:
+                            raise ValueError("OmniRoute base URL is required")
+                        raw = run_omniroute(
+                            model=config.model,
+                            prompt=prompt,
+                            base_url=config.omniroute_base_url,
+                            api_key=config.omniroute_api_key,
+                        )
+                    else:
+                        raw = run_cli(config.cli_command_template, prompt)
                     role_priorities, win_keys, reasoning = validate_label(raw)
                     save_success(
                         local_conn,
@@ -767,6 +874,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--provider", help="Provider label")
     parser.add_argument("--model", help="Model label")
     parser.add_argument("--cli-cmd", help="CLI command template with {prompt_file}")
+    parser.add_argument(
+        "--omniroute-base-url",
+        help="OmniRoute base URL (OpenAI-compatible), e.g. http://127.0.0.1:20128/v1",
+    )
+    parser.add_argument(
+        "--omniroute-api-key",
+        help="Optional OmniRoute API key (sent as Bearer token).",
+    )
     parser.add_argument("--max-jobs", type=int, help="Maximum jobs this run")
     parser.add_argument("--batch-size", type=int, help="Rows to claim per batch")
     parser.add_argument("--rpm", type=float, help="Requests per minute")
