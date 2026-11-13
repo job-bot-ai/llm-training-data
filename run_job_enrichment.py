@@ -162,7 +162,9 @@ def connect_or_explain(local_dsn: str) -> psycopg.Connection:
                 "docker run --name jbot-local-pg -e POSTGRES_PASSWORD=postgres "
                 "-e POSTGRES_DB=jbot_local -p 5432:5432 -d postgres:16"
             )
-            print("Then retry this script with:")
+            print("Then put the password you chose in ~/.pgpass (chmod 600), one line per database:")
+            print("  localhost:5432:jbot_local:postgres:<the POSTGRES_PASSWORD above>")
+            print("and retry this script with:")
             print(f"  {DEFAULT_LOCAL_DSN}\n")
         raise
 

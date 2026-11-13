@@ -20,3 +20,4 @@ done
 
 echo "Local Postgres is ready."
 echo "DSN: ${LOCAL_POSTGRES_DSN:-postgresql://postgres@localhost:5432/jbot_local}"
+echo "The DSN carries no password: add 'localhost:5432:jbot_local:postgres:<password>' to ~/.pgpass (chmod 600)."

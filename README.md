@@ -6,9 +6,10 @@ This workspace contains two scripts:
 - `export_hf_jsonl.py`: exports finished labels into Hugging Face-friendly JSONL shards, defaulting to 10,000 rows per file.
 
 
-> **Passwords are never in this repo.** Connection strings carry no password: libpq reads it from `PGPASSWORD` or
-> `~/.pgpass` (mode 600), e.g. `localhost:5432:jbot_local:postgres:<password>`. A password committed here earlier
-> (removed 2026-11-13) must be treated as exposed.
+> **Passwords are never in this repo.** Connection strings carry no password. Put one line per database in
+> `~/.pgpass` (mode 600), `host:port:database:user:password`, e.g. `localhost:5432:jbot_local:postgres:<password>`
+> plus a line for the source database: libpq picks the matching line for each connection. (`PGPASSWORD` works only
+> when both databases share one password.) A password committed here earlier (removed 2026-11-13) is exposed.
 
 ## What the pipeline stores
 
