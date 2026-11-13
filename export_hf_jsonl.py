@@ -11,7 +11,7 @@ from pathlib import Path
 import psycopg
 from psycopg.rows import dict_row
 
-DEFAULT_LOCAL_DSN = "postgresql://postgres:postgres@localhost:5432/jbot_local"
+DEFAULT_LOCAL_DSN = "postgresql://postgres@localhost:5432/jbot_local"
 DEFAULT_SCHEMA = "training"
 
 

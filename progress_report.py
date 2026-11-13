@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import psycopg
 
-DSN = "postgresql://postgres:postgres@localhost:5432/jbot_local"
+DSN = "postgresql://postgres@localhost:5432/jbot_local"
 
 
 def main() -> None:

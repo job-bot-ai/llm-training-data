@@ -32,10 +32,10 @@ import psycopg
 from psycopg.rows import dict_row
 
 DEFAULT_SOURCE_DSN = (
-    "postgresql://postgres:kR7mQ2pXwN@pmc-us-main.job-bot.ai:5432/"
+    "postgresql://postgres@pmc-us-main.job-bot.ai:5432/"
     "jbot-pcm?sslmode=verify-full&sslrootcert=/etc/ssl/postgres/root.crt"
 )
-DEFAULT_LOCAL_DSN = "postgresql://postgres:postgres@localhost:5432/jbot_local"
+DEFAULT_LOCAL_DSN = "postgresql://postgres@localhost:5432/jbot_local"
 DEFAULT_SCHEMA = "training"
 DEFAULT_OMNIROUTE_BASE_URL = "http://127.0.0.1:20128/v1"
 OMNIROUTE_SENTINEL_CLI = "__omniroute_native__"

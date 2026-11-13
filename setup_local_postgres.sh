@@ -19,4 +19,4 @@ until docker exec "${container_name}" pg_isready -U "${LOCAL_POSTGRES_USER:-post
 done
 
 echo "Local Postgres is ready."
-echo "DSN: ${LOCAL_POSTGRES_DSN:-postgresql://postgres:postgres@localhost:5432/jbot_local}"
+echo "DSN: ${LOCAL_POSTGRES_DSN:-postgresql://postgres@localhost:5432/jbot_local}"

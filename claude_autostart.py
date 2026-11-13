@@ -14,9 +14,9 @@ PYTHON = '/j-bot/llm-training/.venv/bin/python'
 RUNNER = WORKDIR / 'run_job_enrichment.py'
 OUT_LOG = WORKDIR / 'logs' / 'claude_worker.out'
 
-LOCAL_DSN = 'postgresql://postgres:postgres@localhost:5432/jbot_local'
+LOCAL_DSN = 'postgresql://postgres@localhost:5432/jbot_local'
 SOURCE_DSN = (
-    'postgresql://postgres:kR7mQ2pXwN@pmc-us-main.job-bot.ai:5432/'
+    'postgresql://postgres@pmc-us-main.job-bot.ai:5432/'
     'jbot-pcm?hostaddr=100.115.252.23&sslmode=verify-full&sslrootcert=/etc/ssl/postgres/root.crt'
 )
 
