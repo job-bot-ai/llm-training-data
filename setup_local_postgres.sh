@@ -19,5 +19,6 @@ until docker exec "${container_name}" pg_isready -U "${LOCAL_POSTGRES_USER:-post
 done
 
 echo "Local Postgres is ready."
-echo "DSN: ${LOCAL_POSTGRES_DSN:-postgresql://postgres@localhost:5432/jbot_local}"
-echo "The DSN carries no password: add 'localhost:5432:jbot_local:postgres:<password>' to ~/.pgpass (chmod 600)."
+pg_user="${LOCAL_POSTGRES_USER:-postgres}" pg_port="${LOCAL_POSTGRES_PORT:-5432}" pg_db="${LOCAL_POSTGRES_DB:-jbot_local}"
+echo "DSN: ${LOCAL_POSTGRES_DSN:-postgresql://${pg_user}@localhost:${pg_port}/${pg_db}}"
+echo "The DSN carries no password: add 'localhost:${pg_port}:${pg_db}:${pg_user}:<password>' to ~/.pgpass (chmod 600)."
