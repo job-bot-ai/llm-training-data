@@ -15,9 +15,9 @@ HEARTBEAT_LOG = WORKDIR / 'logs' / 'cron_heartbeat.log'
 ENV_FILE = WORKDIR / '.env.local'
 PYTHON = '/j-bot/llm-training/.venv/bin/python'
 RUNNER = '/j-bot/llm-training/run_job_enrichment.py'
-LOCAL_DSN = 'postgresql://postgres:postgres@localhost:5432/jbot_local'
+LOCAL_DSN = 'postgresql://postgres@localhost:5432/jbot_local'
 SOURCE_DSN = (
-    'postgresql://postgres:kR7mQ2pXwN@pmc-us-main.job-bot.ai:5432/'
+    'postgresql://postgres@pmc-us-main.job-bot.ai:5432/'
     'jbot-pcm?hostaddr=100.115.252.23&sslmode=verify-full&sslrootcert=/etc/ssl/postgres/root.crt'
 )
 DEFAULT_PATH = '/usr/local/bin:/usr/bin:/bin:/root/.local/bin'

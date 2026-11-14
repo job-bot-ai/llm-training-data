@@ -5,6 +5,12 @@ This workspace contains two scripts:
 - `run_job_enrichment.py`: syncs source jobs into a local Postgres database, claims unprocessed jobs for a specific provider/model, calls either an LLM CLI or OmniRoute's OpenAI-compatible HTTP API, and stores structured labels.
 - `export_hf_jsonl.py`: exports finished labels into Hugging Face-friendly JSONL shards, defaulting to 10,000 rows per file.
 
+
+> **Passwords are never in this repo.** Connection strings carry no password. Put one line per database in
+> `~/.pgpass` (mode 600), `host:port:database:user:password`, e.g. `localhost:5432:jbot_local:postgres:<password>`
+> plus a line for the source database: libpq picks the matching line for each connection. (`PGPASSWORD` works only
+> when both databases share one password.) A password committed here earlier (removed 2026-11-13) is exposed.
+
 ## What the pipeline stores
 
 The local database uses three tables under the `training` schema:
@@ -78,13 +84,13 @@ The script asks for a local DSN. If local Postgres is not installed, it offers a
 Default local DSN:
 
 ```text
-postgresql://postgres:postgres@localhost:5432/jbot_local
+postgresql://postgres@localhost:5432/jbot_local
 ```
 
 Source data comes from:
 
 ```text
-postgresql://postgres:kR7mQ2pXwN@pmc-us-main.job-bot.ai:5432/jbot-pcm?hostaddr=100.115.252.23&sslmode=verify-full&sslrootcert=/etc/ssl/postgres/root.crt
+postgresql://postgres@pmc-us-main.job-bot.ai:5432/jbot-pcm?hostaddr=100.115.252.23&sslmode=verify-full&sslrootcert=/etc/ssl/postgres/root.crt
 ```
 
 The `hostaddr` parameter forces traffic over the Tailscale IP while TLS hostname verification still uses `pmc-us-main.job-bot.ai`.
@@ -150,7 +156,7 @@ Example non-interactive invocation:
 
 ```bash
 python run_job_enrichment.py \
-  --local-dsn "postgresql://postgres:postgres@localhost:5432/jbot_local" \
+  --local-dsn "postgresql://postgres@localhost:5432/jbot_local" \
   --provider "Google" \
   --model "gemini-2.5-pro" \
   --cli-cmd "gemini --prompt \"\" < {prompt_file}" \
@@ -163,7 +169,7 @@ OmniRoute example:
 
 ```bash
 python run_job_enrichment.py \
-  --local-dsn "postgresql://postgres:postgres@localhost:5432/jbot_local" \
+  --local-dsn "postgresql://postgres@localhost:5432/jbot_local" \
   --provider "OmniRoute" \
   --model "openai/gpt-4.1-mini" \
   --omniroute-base-url "http://127.0.0.1:20128/v1" \
@@ -197,7 +203,7 @@ Example:
 
 ```bash
 python export_hf_jsonl.py \
-  --local-dsn "postgresql://postgres:postgres@localhost:5432/jbot_local" \
+  --local-dsn "postgresql://postgres@localhost:5432/jbot_local" \
   --provider "Google" \
   --model "gemini-2.5-pro" \
   --output-dir exports \

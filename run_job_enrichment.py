@@ -32,10 +32,10 @@ import psycopg
 from psycopg.rows import dict_row
 
 DEFAULT_SOURCE_DSN = (
-    "postgresql://postgres:kR7mQ2pXwN@pmc-us-main.job-bot.ai:5432/"
+    "postgresql://postgres@pmc-us-main.job-bot.ai:5432/"
     "jbot-pcm?sslmode=verify-full&sslrootcert=/etc/ssl/postgres/root.crt"
 )
-DEFAULT_LOCAL_DSN = "postgresql://postgres:postgres@localhost:5432/jbot_local"
+DEFAULT_LOCAL_DSN = "postgresql://postgres@localhost:5432/jbot_local"
 DEFAULT_SCHEMA = "training"
 DEFAULT_OMNIROUTE_BASE_URL = "http://127.0.0.1:20128/v1"
 OMNIROUTE_SENTINEL_CLI = "__omniroute_native__"
@@ -162,7 +162,9 @@ def connect_or_explain(local_dsn: str) -> psycopg.Connection:
                 "docker run --name jbot-local-pg -e POSTGRES_PASSWORD=postgres "
                 "-e POSTGRES_DB=jbot_local -p 5432:5432 -d postgres:16"
             )
-            print("Then retry this script with:")
+            print("Then put the password you chose in ~/.pgpass (chmod 600), one line per database:")
+            print("  localhost:5432:jbot_local:postgres:<the POSTGRES_PASSWORD above>")
+            print("and retry this script with:")
             print(f"  {DEFAULT_LOCAL_DSN}\n")
         raise
 
